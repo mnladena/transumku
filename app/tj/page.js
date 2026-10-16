@@ -1,6 +1,8 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import Search, { ink } from "../Search";
+import { BUS, Ico, TRAIN } from "../icons";
 
 // Bus position `off` seconds into a trip: straight line between stops.
 // ponytail: ignores road shape (shapes.txt), use it if straight lines look wrong on curvy routes.
@@ -60,14 +62,6 @@ const esc = (s) =>
   String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const fmtDist = (d) =>
   d < 1000 ? Math.round(d) + " m" : (d / 1000).toFixed(1) + " km";
-// Dark or light badge text, whichever reads on the route colour.
-const ink = (c) =>
-  parseInt(c.slice(1, 3), 16) * 0.299 +
-    parseInt(c.slice(3, 5), 16) * 0.587 +
-    parseInt(c.slice(5, 7), 16) * 0.114 >
-  150
-    ? "#0a0f1d"
-    : "#fff";
 const clockNow = () => {
   const d = new Date();
   return {
@@ -77,9 +71,12 @@ const clockNow = () => {
   };
 };
 
-const Card = ({ kind, name, href, d, rows, empty }) => (
+const Card = ({ kind, icon, name, href, d, rows, empty }) => (
   <section className="card">
-    <span className="label kind">{kind}</span>
+    <span className="label kind">
+      <Ico svg={icon} />
+      {kind}
+    </span>
     <h4>
       <span>{href ? <a href={href}>{name}</a> : name}</span>
       <small>{fmtDist(d)}</small>
@@ -156,7 +153,7 @@ export default function TJ() {
       );
       Object.assign(g, { krl, trips, halte });
       setRoutes(
-        [...new Map(trips.map((t) => [t.r, t.n]))].sort(([a], [b]) =>
+        [...new Map(trips.map((t) => [t.r, [t.r, t.n, t.r, t.c]])).values()].sort(([a], [b]) =>
           a.localeCompare(b, "id", { numeric: true }),
         ),
       );
@@ -178,7 +175,8 @@ export default function TJ() {
       .forEach((t) =>
         L.polyline(
           t.s.map((s) => [s[0], s[1]]),
-          { color: t.c, weight: route ? 4 : 1.5, opacity: route ? 0.8 : 0.35 },
+          // Faint lines so the solid bus icons on top stand out.
+          { color: t.c, weight: route ? 3 : 1, opacity: route ? 0.3 : 0.2 },
         ).addTo(lines),
       );
     if (route)
@@ -193,19 +191,35 @@ export default function TJ() {
       const { d, now, day } = clockNow(),
         list = active(trips, now, day, route),
         seen = new Set();
+      // Bus icons are DOM nodes, so only when few are visible: one corridor, or zoomed in (on-screen only).
+      // Otherwise cheap canvas dots for the ~6000 citywide.
+      const icons = route || map.getZoom() >= 15,
+        view = map.getBounds().pad(0.2);
       for (const b of list) {
         const p = at(b.t.s, b.off);
-        seen.add(b.id);
-        let m = buses.get(b.id);
+        if (icons && !route && !view.contains(p.ll)) continue;
+        const key = b.id + (icons ? "i" : "");
+        seen.add(key);
+        let m = buses.get(key);
         if (!m) {
-          m = L.circleMarker(p.ll, {
-            radius: 5,
-            color: "#0a0f1d",
-            weight: 1.5,
-            fillColor: b.t.c,
-            fillOpacity: 1,
-          }).addTo(map);
-          buses.set(b.id, m);
+          m = (
+            icons
+              ? L.marker(p.ll, {
+                  icon: L.divIcon({
+                    className: "bus-ico",
+                    html: `<span style="--c:${esc(b.t.c)};--g:${ink(b.t.c)}">${BUS}</span>`,
+                    iconSize: [30, 30],
+                  }),
+                })
+              : L.circleMarker(p.ll, {
+                  radius: 5,
+                  color: "#fff",
+                  weight: 1.5,
+                  fillColor: b.t.c,
+                  fillOpacity: 1,
+                })
+          ).addTo(map);
+          buses.set(key, m);
         }
         m.setLatLng(p.ll).bindTooltip(
           `<b>${esc(b.t.r)}</b> ${esc(b.t.h)}<br><span class="mute">berikut:</span> ${esc(p.next)}`,
@@ -223,7 +237,11 @@ export default function TJ() {
     };
     tick();
     const id = setInterval(tick, 2000);
-    return () => clearInterval(id);
+    map.on("moveend", tick);
+    return () => {
+      clearInterval(id);
+      map.off("moveend", tick);
+    };
   }, [ready, route, g]);
 
   // Nearest halte + KRL stations around the user, refreshed on every GPS fix and every 30 s.
@@ -235,7 +253,7 @@ export default function TJ() {
         radius: 9,
         color: "#fff",
         weight: 3,
-        fillColor: "#ffb81c",
+        fillColor: "#7b61d1",
         fillOpacity: 1,
       })
         .bindTooltip("Kamu")
@@ -270,7 +288,7 @@ export default function TJ() {
       [...stops, ...stations].forEach((x) =>
         L.circleMarker(x.ll, {
           radius: 9,
-          color: x.id ? "#ff5a5f" : "#4da3ff",
+          color: x.id ? "#e0788f" : "#5b9bd5",
           weight: 3,
           fill: false,
         })
@@ -298,6 +316,7 @@ export default function TJ() {
           }));
         return {
           kind: "Halte TransJakarta",
+          icon: BUS,
           name: x.name,
           d: x.d,
           rows,
@@ -326,6 +345,7 @@ export default function TJ() {
             }));
           return {
             kind: "Stasiun KRL",
+            icon: TRAIN,
             name: x.name,
             href: "/?st=" + encodeURIComponent(x.id),
             d: x.d,
@@ -366,9 +386,11 @@ export default function TJ() {
         <header className="top">
           <div className="brand">Transumku</div>
           <nav className="tabs">
-            <Link href="/">KRL</Link>
+            <Link href="/">
+              <Ico svg={TRAIN} /> KRL
+            </Link>
             <Link className="on" href="/tj">
-              TransJakarta
+              <Ico svg={BUS} /> TransJakarta
             </Link>
           </nav>
         </header>
@@ -384,18 +406,11 @@ export default function TJ() {
         </div>
         <label>
           <span className="label">Koridor</span>
-          <select
-            className="big"
+          <Search
             value={route}
-            onChange={(e) => setRoute(e.target.value)}
-          >
-            <option value="">Semua koridor</option>
-            {routes.map(([r, n]) => (
-              <option key={r} value={r}>
-                {r} · {n}
-              </option>
-            ))}
-          </select>
+            onChange={setRoute}
+            options={[["", "Semua koridor", "∗"], ...routes]}
+          />
         </label>
         <button className="btn" disabled={locating} onClick={locate}>
           Lokasi saya + terdekat

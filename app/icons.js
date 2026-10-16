@@ -1,0 +1,8 @@
+// Inline SVG glyphs, kept as strings so Leaflet divIcons can use them too. Colour follows currentColor.
+export const TRAIN = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="2" width="14" height="16" rx="4" fill="currentColor"/><rect x="7.5" y="5" width="9" height="5" rx="1.5" fill="#fff"/><circle cx="9" cy="14" r="1.4" fill="#fff"/><circle cx="15" cy="14" r="1.4" fill="#fff"/><path d="M8.5 18.5 6.5 22M15.5 18.5l2 3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
+export const BUS = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="2.5" width="16" height="16" rx="3.5" fill="currentColor"/><rect x="6.5" y="5.5" width="11" height="6" rx="1.5" fill="#fff"/><circle cx="8" cy="15" r="1.4" fill="#fff"/><circle cx="16" cy="15" r="1.4" fill="#fff"/><rect x="5.5" y="18" width="3" height="3.5" rx="1" fill="currentColor"/><rect x="15.5" y="18" width="3" height="3.5" rx="1" fill="currentColor"/></svg>`;
+export const CLOCK = `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2.5"/><path d="M12 7v5l3 2" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+export const PIN = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s7-6.3 7-12a7 7 0 1 0-14 0c0 5.7 7 12 7 12z" fill="currentColor"/><circle cx="12" cy="10" r="2.6" fill="#fff"/></svg>`;
+
+// Constant strings only — never pass user data here.
+export const Ico = ({ svg }) => <span className="ico" dangerouslySetInnerHTML={{ __html: svg }} />;

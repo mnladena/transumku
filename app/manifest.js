@@ -5,8 +5,8 @@ export default function manifest() {
     description: 'Posisi KRL dan peta TransJakarta, langsung dari jadwal.',
     start_url: '/',
     display: 'standalone',
-    background_color: '#0a0f1d',
-    theme_color: '#0a0f1d',
+    background_color: '#f6f3fb',
+    theme_color: '#f6f3fb',
     icons: [192, 512].map(s => ({src: `/icon/${s}`, sizes: `${s}x${s}`, type: 'image/png'})),
   };
 }

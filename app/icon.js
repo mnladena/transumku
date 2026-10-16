@@ -1,9 +1,9 @@
 import { ImageResponse } from 'next/og';
 
-// Brand mark: glowing amber square on the night background (same as .brand::before).
+// Brand mark: lavender square on the pastel background (same as .brand::before).
 export const mark = s => (
-  <div style={{width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0a0f1d'}}>
-    <div style={{width: s * .42, height: s * .42, borderRadius: s * .1, background: '#ffb81c', boxShadow: `0 0 ${s * .15}px rgba(255, 184, 28, .55)`}} />
+  <div style={{width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f6f3fb'}}>
+    <div style={{width: s * .42, height: s * .42, borderRadius: s * .12, background: '#7b61d1', boxShadow: `0 ${s * .03}px ${s * .1}px rgba(123, 97, 209, .35)`}} />
   </div>
 );
 

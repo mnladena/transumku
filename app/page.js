@@ -1,6 +1,8 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import Search from "./Search";
+import { BUS, CLOCK, Ico, PIN, TRAIN } from "./icons";
 
 const API = "https://api.comuline.com/v1";
 const get = (url) =>
@@ -82,7 +84,7 @@ export default function KRL() {
           )
           .sort((a, b) => mins(a.departs_at) - mins(b.departs_at))
           .map(async (s) => {
-            routes[s.train_id] ??= get("/route/" + s.train_id)
+            routes[s.train_id] ??= get("/route/" + encodeURIComponent(s.train_id)) // some IDs contain "/", e.g. D1/R5022A
               .then((d) =>
                 d.routes.sort(
                   (a, b) => mins(a.departs_at) - mins(b.departs_at),
@@ -128,27 +130,25 @@ export default function KRL() {
         <div className="brand">Transumku</div>
         <nav className="tabs">
           <Link className="on" href="/">
-            KRL
+            <Ico svg={TRAIN} /> KRL
           </Link>
-          <Link href="/tj">TransJakarta</Link>
+          <Link href="/tj">
+            <Ico svg={BUS} /> TransJakarta
+          </Link>
         </nav>
         <div className="clock">
           {now ? now.toLocaleTimeString("id-ID") : "--.--.--"}
         </div>
       </header>
       <label className="pick">
-        <span className="label">Stasiun keberangkatan</span>
-        <select
-          className="big"
+        <span className="label">
+          <Ico svg={PIN} /> Stasiun keberangkatan
+        </span>
+        <Search
           value={st}
-          onChange={(e) => setSt(e.target.value)}
-        >
-          {stations.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </select>
+          onChange={setSt}
+          options={stations.map((s) => [s.id, s.name, s.id])}
+        />
       </label>
       <div className="status mute">
         <span>45 menit ke depan</span>
@@ -172,15 +172,20 @@ export default function KRL() {
               <div>
                 <div className="time">{s.departs_at.slice(11, 16)}</div>
                 <span className={due <= 0 ? "in now" : "in"}>
+                  <Ico svg={CLOCK} />
                   {due <= 0 ? "berangkat" : due + " mnt"}
                 </span>
               </div>
               <div>
-                <div className="dest">{parts.at(-1)}</div>
+                <div className="dest">
+                  <Ico svg={TRAIN} />
+                  {parts.at(-1)}
+                </div>
                 <div className="meta">
                   {s.train_id} · dari {parts[0]} · {s.line}
                 </div>
                 <div className="pos">
+                  <Ico svg={PIN} />
                   {ok ? posisi(s.stops, nowM) : "rute tidak tersedia"}
                 </div>
               </div>
@@ -198,6 +203,7 @@ export default function KRL() {
                     <b
                       title="posisi kereta"
                       style={{ left: (frac(s.stops, nowS) / n) * 100 + "%" }}
+                      dangerouslySetInnerHTML={{ __html: TRAIN }}
                     />
                   </div>
                   <div className="ends">
