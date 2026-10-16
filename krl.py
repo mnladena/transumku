@@ -52,6 +52,6 @@ if __name__ == '__main__':
     stations = fetch('https://api.comuline.com/v1/station')['data']
     out = build(osm, stations)
     assert 'MRI' in out and len(out) > 80, f'only {len(out)} stations matched'
-    with open('krl.json', 'w') as f:
+    with open('public/krl.json', 'w') as f:
         json.dump(out, f, separators=(',', ':'))
-    print(len(out), 'stations written to krl.json')
+    print(len(out), 'stations written to public/krl.json')

@@ -9,8 +9,8 @@
   --mute: #8794ad;
   --amber: #ffb81c;
   --amber-glow: rgba(255, 184, 28, .35);
-  --display: 'Big Shoulders Display', 'Arial Narrow', sans-serif;
-  --body: 'Public Sans', system-ui, sans-serif;
+  --display: var(--font-display), 'Arial Narrow', sans-serif;
+  --body: var(--font-body), system-ui, sans-serif;
 }
 * { box-sizing: border-box; }
 body {
@@ -86,6 +86,54 @@ select.big:focus-visible, .btn:focus-visible, .tabs a:focus-visible { outline: 2
 .row:first-of-type { border-top: 0; }
 .row .eta { font: 800 18px/1 var(--display); color: var(--amber); font-variant-numeric: tabular-nums; }
 .badge { min-width: 38px; text-align: center; padding: 3px 6px; border-radius: 6px; font: 800 13px/1 var(--display); letter-spacing: .03em; background: var(--b, var(--line)); color: var(--bi, var(--ink)); }
+
+/* KRL page */
+main.krl { max-width: 680px; margin: 0 auto; padding: 18px 16px 40px; }
+.krl .pick { display: block; margin: 28px 0 8px; }
+.krl .status { display: flex; justify-content: space-between; font-size: 12px; margin: 10px 2px 14px; }
+.krl .empty { padding: 28px; text-align: center; border: 1px dashed var(--line); border-radius: 16px; }
+.krl footer { margin-top: 24px; font-size: 12px; text-align: center; }
+
+/* TJ map page */
+#map { position: absolute; inset: 0; background: var(--bg); }
+.sheet {
+  position: absolute; z-index: 1000; top: 12px; left: 12px; bottom: 12px; width: 370px; overflow: auto;
+  display: flex; flex-direction: column; gap: 12px; padding: 16px;
+  background: rgba(12, 18, 34, .86); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--line); border-radius: 20px; box-shadow: 0 20px 50px rgba(0, 0, 0, .45);
+}
+.sheet .top { flex-wrap: nowrap; }
+.sheet .brand { font-size: 22px; }
+.sheet select.big { font-size: 19px; padding: 10px 40px 10px 12px; }
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.stat { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; }
+.stat b { display: block; margin-top: 4px; font: 800 28px/1 var(--display); color: var(--amber); font-variant-numeric: tabular-nums; }
+#near { display: grid; gap: 10px; }
+.kind { display: block; margin-bottom: 2px; }
+.note { font-size: 11px; margin-top: auto; }
+.leaflet-container { font-family: var(--body); }
+/* Night map from standard OSM tiles; keyless dark tile services keep disappearing. */
+.leaflet-tile-pane { filter: invert(1) hue-rotate(200deg) brightness(.8) contrast(.95) saturate(.35); }
+.leaflet-tooltip { background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 18px rgba(0, 0, 0, .4); }
+.leaflet-tooltip-top::before, .leaflet-tooltip-bottom::before, .leaflet-tooltip-left::before, .leaflet-tooltip-right::before { display: none; }
+.leaflet-bar a { background: var(--panel); color: var(--ink); border-color: var(--line); }
+.leaflet-control-attribution { background: rgba(10, 15, 29, .7) !important; color: var(--mute); }
+.leaflet-control-attribution a { color: var(--mute); }
+@media (max-width: 700px) {
+  .sheet { top: auto; right: 8px; left: 8px; bottom: 8px; width: auto; max-height: 52vh; padding: 14px; }
+  .sheet .tabs a { padding: 7px 10px; }
+}
+
+/* Splash: CSS-only, fades out by itself. */
+.splash {
+  position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center; background: var(--bg);
+  animation: splash-out .4s ease 1.2s forwards; pointer-events: none;
+}
+.splash .brand { font-size: 48px; animation: rise .6s cubic-bezier(.2, .8, .2, 1) both; }
+.splash .brand::before { width: 20px; height: 20px; border-radius: 5px; animation: pulse 1.2s ease-in-out infinite; }
+@keyframes splash-out { to { opacity: 0; visibility: hidden; } }
+/* Reduced-motion rule below kills animations, which would leave the splash stuck on. */
+@media (prefers-reduced-motion: reduce) { .splash { display: none; } }
 
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } }
 @keyframes pulse { 50% { box-shadow: 0 0 0 6px rgba(255, 184, 28, .12), 0 0 22px var(--amber-glow); } }

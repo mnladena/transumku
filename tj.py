@@ -47,6 +47,6 @@ if __name__ == '__main__':
     with urllib.request.urlopen(URL) as resp:
         trips = build(zipfile.ZipFile(io.BytesIO(resp.read())))
     assert trips and all(t['s'][-1][2] > 0 for t in trips), 'empty or zero-length trips'
-    with open('tj.json', 'w') as out:
+    with open('public/tj.json', 'w') as out:
         json.dump(trips, out, separators=(',', ':'))
-    print(len(trips), 'trips written to tj.json')
+    print(len(trips), 'trips written to public/tj.json')
