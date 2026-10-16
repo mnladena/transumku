@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Posisi KRL</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800&family=Public+Sans:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="style.css">
+<style>
+  main { max-width: 680px; margin: 0 auto; padding: 18px 16px 40px; }
+  .pick { display: block; margin: 28px 0 8px; }
+  .status { display: flex; justify-content: space-between; font-size: 12px; margin: 10px 2px 14px; }
+  .empty { padding: 28px; text-align: center; border: 1px dashed var(--line); border-radius: 16px; }
+  footer { margin-top: 24px; font-size: 12px; text-align: center; }
+</style>
+</head>
+<body>
+<main>
+  <header class="top">
+    <div class="brand">Transum</div>
+    <nav class="tabs"><a class="on" href="index.html">KRL</a><a href="tj.html">TransJakarta</a></nav>
+    <div class="clock" id="clock">--.--.--</div>
+  </header>
+  <label class="pick"><span class="label">Stasiun keberangkatan</span><select class="big" id="st"></select></label>
+  <div class="status mute"><span>45 menit ke depan</span><span id="info"></span></div>
+  <ul class="deps" id="list"></ul>
+  <footer class="mute">Posisi = estimasi dari jadwal (api.comuline.com), bukan GPS.</footer>
+</main>
+
+<script>
+const API = 'https://api.comuline.com/v1';
+const $ = id => document.getElementById(id);
+const get = url => fetch(API + url).then(r => r.json()).then(j => j.data);
+// API stores WIB wall-clock time labelled +00, so read HH:MM straight off the string.
+const mins = s => +s.slice(11, 13) * 60 + +s.slice(14, 16);
+const nowMins = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
+const nowSecs = () => { const d = new Date(); return d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds(); };
+const routes = {};
+const esc = s => String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+
+// stops: [{station_name, departs_at}] sorted by time. ponytail: ignores trips crossing midnight.
+function posisi(stops, now) {
+  const t = stops.map(s => mins(s.departs_at));
+  if (now < t[0]) return `belum berangkat dari ${stops[0].station_name}`;
+  if (now >= t.at(-1)) return `sudah di ${stops.at(-1).station_name}`;
+  const i = t.findLastIndex(x => x <= now);
+  return now === t[i] ? `di ${stops[i].station_name}`
+    : `antara ${stops[i].station_name} → ${stops[i + 1].station_name}`;
+}
+
+// Fractional stop index at `now` (seconds of day): 2.5 = halfway between stop 2 and 3.
+function frac(stops, now) {
+  const t = stops.map(s => mins(s.departs_at) * 60);
+  if (now <= t[0]) return 0;
+  if (now >= t.at(-1)) return t.length - 1;
+  const i = t.findLastIndex(x => x <= now);
+  return i + (now - t[i]) / (t[i + 1] - t[i]);
+}
+
+const A = {station_name: 'A', departs_at: '2024-01-01 10:00'}, B = {station_name: 'B', departs_at: '2024-01-01 10:05'};
+console.assert(posisi([A, B], 602) === 'antara A → B');
+console.assert(frac([A, B], 36000 + 150) === 0.5 && frac([A, B], 0) === 0 && frac([A, B], 99999) === 1);
+
+let schedule = [], shown = [];
+async function loadStation() {
+  localStorage.st = $('st').value;
+  $('info').textContent = 'memuat…';
+  $('list').className = 'deps anim'; // stagger cards only on station change, not every refresh
+  schedule = await get('/schedule/' + $('st').value);
+  render();
+}
+
+const track = s => {
+  const n = s.stops.length - 1;
+  return `<div class="track">${s.stops.map((st, k) =>
+    `<i style="left:${k / n * 100}%" class="${st.station_id === $('st').value ? 'here' : ''}" title="${esc(st.station_name)} ${st.departs_at.slice(11, 16)}"></i>`).join('')}<b title="posisi kereta"></b></div>
+    <div class="ends"><span>${esc(s.stops[0].station_name)}</span><span>${esc(s.stops[n].station_name)}</span></div>`;
+};
+
+async function render() {
+  const now = nowMins();
+  shown = schedule
+    .filter(s => mins(s.departs_at) >= now - 1 && mins(s.departs_at) <= now + 45)
+    .sort((a, b) => mins(a.departs_at) - mins(b.departs_at));
+  await Promise.all(shown.map(async s => {
+    routes[s.train_id] ??= get('/route/' + s.train_id).then(d => d.routes.sort((a, b) => mins(a.departs_at) - mins(b.departs_at))).catch(() => null);
+    s.stops = await routes[s.train_id];
+    s.pos = s.stops?.length > 1 ? posisi(s.stops, now) : 'rute tidak tersedia';
+  }));
+  $('list').innerHTML = shown.map((s, k) => {
+    const c = /^#[0-9a-f]{3,8}$/i.test(s.metadata?.origin?.color) ? s.metadata.origin.color : '';
+    const due = mins(s.departs_at) - now, [from, to] = [s.route.split('-')[0], s.route.split('-').pop()];
+    return `<li class="dep" style="--i:${k};${c && '--c:' + c}">
+      <div><div class="time">${s.departs_at.slice(11, 16)}</div><span class="in ${due <= 0 ? 'now' : ''}">${due <= 0 ? 'berangkat' : due + ' mnt'}</span></div>
+      <div><div class="dest">${esc(to)}</div><div class="meta">${esc(s.train_id)} · dari ${esc(from)} · ${esc(s.line)}</div><div class="pos">${esc(s.pos)}</div></div>
+      ${s.stops?.length > 1 ? `<div class="ride">${track(s)}</div>` : ''}</li>`;
+  }).join('') || '<li class="empty mute">Tidak ada kereta 45 menit ke depan.</li>';
+  tick();
+  $('info').textContent = 'update ' + new Date().toLocaleTimeString('id-ID', {hour: '2-digit', minute: '2-digit'});
+}
+
+// Move train icons every second; list text refreshes every 30 s.
+function tick() {
+  const now = nowSecs(), tracks = document.querySelectorAll('.track');
+  $('clock').textContent = new Date().toLocaleTimeString('id-ID');
+  shown.filter(s => s.stops?.length > 1).forEach((s, k) => {
+    tracks[k].lastChild.style.left = frac(s.stops, now) / (s.stops.length - 1) * 100 + '%';
+  });
+}
+
+get('/station').then(st => {
+  st.filter(s => s.type === 'KRL').sort((a, b) => a.name.localeCompare(b.name))
+    .forEach(s => $('st').add(new Option(s.name, s.id)));
+  $('st').value = new URLSearchParams(location.search).get('st') || localStorage.st || 'MRI';
+  $('st').onchange = loadStation;
+  loadStation();
+  setInterval(() => { $('list').className = 'deps'; render(); }, 30000);
+  setInterval(tick, 1000);
+});
+</script>
+</body>
+</html>
