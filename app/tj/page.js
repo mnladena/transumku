@@ -2,6 +2,8 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import Search, { ink } from "../Search";
+import Settings, { notify, on, syncPush } from "../Settings";
+import { buildHalte, nextBuses, nextTrains } from "../transit";
 import { BUS, Ico, TRAIN } from "../icons";
 
 // Bus position `off` seconds into a trip: straight line between stops.
@@ -43,20 +45,6 @@ function active(trips, now, day, route) {
   });
   return out;
 }
-
-// Seconds until the next bus of trip `t` reaches the stop `off` seconds into the trip.
-function eta(t, off, now) {
-  let best = Infinity;
-  for (const [s, e, h] of t.f) {
-    const dep = s + Math.max(0, Math.ceil((now - off - s) / h)) * h;
-    if (dep <= e) best = Math.min(best, dep + off - now);
-  }
-  return best;
-}
-console.assert(
-  eta({ f: [[0, 1000, 100]] }, 30, 250) === 80 &&
-    eta({ f: [[0, 1000, 100]] }, 30, 2000) === Infinity,
-);
 
 const esc = (s) =>
   String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -114,6 +102,7 @@ export default function TJ() {
   const [me, setMe] = useState(null);
   const [near, setNear] = useState(null); // status text or list of cards
   const [locating, setLocating] = useState(false);
+  const [mini, setMini] = useState(false); // mobile: sheet folded down to its header
 
   // Leaflet touches `window` on import, so load it client-side only.
   useEffect(() => {
@@ -141,17 +130,7 @@ export default function TJ() {
         ["/krl.json", "/tj.json"].map((u) => fetch(u).then((r) => r.json())),
       );
       if (dead) return;
-      // One halte per name + ~100 m cell, so both platforms of a stop merge.
-      const halte = new Map();
-      trips.forEach((t) =>
-        t.s.forEach(([lat, lon, off, name]) => {
-          const key = `${name}@${lat.toFixed(3)},${lon.toFixed(3)}`;
-          if (!halte.has(key))
-            halte.set(key, { name, ll: [lat, lon], serve: [] });
-          halte.get(key).serve.push([t, off]);
-        }),
-      );
-      Object.assign(g, { krl, trips, halte });
+      Object.assign(g, { krl, trips, halte: buildHalte(trips) });
       setRoutes(
         [...new Map(trips.map((t) => [t.r, [t.r, t.n, t.r, t.c]])).values()].sort(([a], [b]) =>
           a.localeCompare(b, "id", { numeric: true }),
@@ -296,23 +275,27 @@ export default function TJ() {
           .addTo(nearLayer),
       );
 
+      // Nearest halte + station double as the stops the push server watches while the app is closed.
+      const ps = JSON.stringify({
+        halte: stops[0]?.key,
+        halteName: stops[0]?.name,
+        station: stations[0]?.id,
+        stationName: stations[0]?.name,
+      });
+      if (localStorage.pushStops !== ps) {
+        localStorage.pushStops = ps;
+        syncPush();
+      }
+
       const halteCards = stops.map((x) => {
-        const next = new Map();
-        for (const [t, off] of x.serve) {
-          if (!t.d[day]) continue;
-          const key = `${t.r} → ${t.h}`,
-            s = eta(t, off, now);
-          if (s < (next.get(key)?.s ?? Infinity)) next.set(key, { t, s });
-        }
-        const rows = [...next.values()]
-          .filter((a) => a.s < Infinity)
-          .sort((a, b) => a.s - b.s)
+        const rows = nextBuses(x, now, day)
           .slice(0, 5)
           .map(({ t, s }) => ({
             badge: t.r,
             color: t.c,
             text: t.h,
             eta: s < 60 ? "tiba" : Math.round(s / 60) + "′",
+            sec: s,
           }));
         return {
           kind: "Halte TransJakarta",
@@ -332,16 +315,13 @@ export default function TJ() {
             .then((r) => r.json())
             .then((j) => j.data)
             .catch(() => []);
-          // Same WIB-labelled-as-UTC quirk as the KRL page: read HH:MM straight off the string.
-          const rows = (await g.krlSchedule[x.id])
-            .map((s) => ({ ...s, t: s.departs_at.slice(11, 16) }))
-            .filter((s) => +s.t.slice(0, 2) * 3600 + +s.t.slice(3) * 60 >= now)
-            .sort((a, b) => a.t.localeCompare(b.t))
+          const rows = nextTrains(await g.krlSchedule[x.id], now)
             .slice(0, 4)
             .map((s) => ({
               badge: s.train_id,
               text: s.route.replace("-", " → "),
               eta: s.t,
+              sec: s.sec,
             }));
           return {
             kind: "Stasiun KRL",
@@ -355,7 +335,25 @@ export default function TJ() {
         }),
       );
 
-      if (alive) setNear([...halteCards, ...krlCards]);
+      if (!alive) return;
+      setNear([...halteCards, ...krlCards]);
+
+      // Arrival alerts: anything at the nearest stops due within 2 min, once per vehicle.
+      // With push on, the server already alerts for these same stops.
+      if (on("arrival") && !on("push")) {
+        g.notified ??= new Set();
+        for (const c of [...halteCards, ...krlCards])
+          for (const r of c.rows) {
+            const key = `${c.name}|${r.badge}|${r.text}|${Math.round((now + r.sec) / 60)}`;
+            if (r.sec > 120 || g.notified.has(key)) continue;
+            g.notified.add(key);
+            notify(
+              `${c.icon === TRAIN ? "Kereta" : "Bus"} ${r.badge} → ${r.text}`,
+              `${r.sec < 60 ? "Sekarang" : "~" + Math.round(r.sec / 60) + " menit lagi"} di ${c.name}`,
+              key,
+            );
+          }
+      }
     };
     update();
     const id = setInterval(update, 30000);
@@ -382,9 +380,17 @@ export default function TJ() {
     <>
       <title>Peta TransJakarta</title>
       <div id="map" ref={mapEl} />
-      <aside className="sheet" ref={sheetEl}>
+      <aside className={mini ? "sheet mini" : "sheet"} ref={sheetEl}>
+        <button
+          className="sheet-toggle"
+          aria-expanded={!mini}
+          onClick={() => setMini(!mini)}
+        >
+          {mini ? "▲ Tampilkan panel" : "▼ Sembunyikan panel"}
+        </button>
         <header className="top">
           <div className="brand">Transumku</div>
+          <Settings />
           <nav className="tabs">
             <Link href="/">
               <Ico svg={TRAIN} /> KRL

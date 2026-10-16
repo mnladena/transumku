@@ -7,9 +7,11 @@
     "start": "next start"
   },
   "dependencies": {
+    "@upstash/redis": "^1.39.0",
     "leaflet": "^1.9.4",
     "next": "^16.4.2",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "web-push": "^3.6.7"
   }
 }

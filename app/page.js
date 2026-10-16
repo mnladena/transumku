@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import Search from "./Search";
+import Settings from "./Settings";
 import { BUS, CLOCK, Ico, PIN, TRAIN } from "./icons";
 
 const API = "https://api.comuline.com/v1";
@@ -136,8 +137,11 @@ export default function KRL() {
             <Ico svg={BUS} /> TransJakarta
           </Link>
         </nav>
-        <div className="clock">
-          {now ? now.toLocaleTimeString("id-ID") : "--.--.--"}
+        <div className="top-end">
+          <div className="clock">
+            {now ? now.toLocaleTimeString("id-ID") : "--.--.--"}
+          </div>
+          <Settings />
         </div>
       </header>
       <label className="pick">
