@@ -1,8 +1,8 @@
 "use client";
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import Search, { ink } from "../Search";
-import Settings, { notify, on, syncPush } from "../Settings";
+import { notify, on, syncPush } from "../Settings"; // settings UI hidden for now; all toggles read as off
+import Tabs from "../Tabs";
 import { buildHalte, nextBuses, nextTrains } from "../transit";
 import { BUS, Ico, TRAIN } from "../icons";
 
@@ -390,15 +390,7 @@ export default function TJ() {
         </button>
         <header className="top">
           <div className="brand">Transumku</div>
-          <Settings />
-          <nav className="tabs">
-            <Link href="/">
-              <Ico svg={TRAIN} /> KRL
-            </Link>
-            <Link className="on" href="/tj">
-              <Ico svg={BUS} /> TransJakarta
-            </Link>
-          </nav>
+          <Tabs on="/tj" />
         </header>
         <div className="stats">
           <div className="stat">

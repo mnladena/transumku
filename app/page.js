@@ -1,9 +1,8 @@
 "use client";
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import Search from "./Search";
-import Settings from "./Settings";
-import { BUS, CLOCK, Ico, PIN, TRAIN } from "./icons";
+import Tabs from "./Tabs";
+import { CLOCK, Ico, PIN, TRAIN } from "./icons";
 
 const API = "https://api.comuline.com/v1";
 const get = (url) =>
@@ -129,19 +128,9 @@ export default function KRL() {
       <title>Posisi KRL</title>
       <header className="top">
         <div className="brand">Transumku</div>
-        <nav className="tabs">
-          <Link className="on" href="/">
-            <Ico svg={TRAIN} /> KRL
-          </Link>
-          <Link href="/tj">
-            <Ico svg={BUS} /> TransJakarta
-          </Link>
-        </nav>
-        <div className="top-end">
-          <div className="clock">
-            {now ? now.toLocaleTimeString("id-ID") : "--.--.--"}
-          </div>
-          <Settings />
+        <Tabs on="/" />
+        <div className="clock">
+          {now ? now.toLocaleTimeString("id-ID") : "--.--.--"}
         </div>
       </header>
       <label className="pick">

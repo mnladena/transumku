@@ -30,7 +30,6 @@ a { color: var(--accent); }
 .tabs a { display: flex; align-items: center; gap: 6px; color: var(--mute); text-decoration: none; font: 700 14px/1 var(--display); padding: 8px 14px; border-radius: 999px; }
 .tabs a.on { background: var(--accent-soft); color: var(--accent); }
 .clock { font: 800 22px/1 var(--display); font-variant-numeric: tabular-nums; }
-.top-end { display: flex; align-items: center; gap: 10px; }
 
 /* Settings: gear button + popover of switches */
 .settings { position: relative; }
@@ -133,6 +132,8 @@ main.krl { max-width: 680px; margin: 0 auto; padding: 20px 16px 40px; }
 .krl .status { display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; margin: 12px 4px 14px; }
 .krl .empty { padding: 28px; text-align: center; background: var(--panel); border: 2px dashed var(--line); border-radius: 18px; }
 .krl footer { margin-top: 24px; font-size: 12px; text-align: center; }
+.krl .info-head { margin: 28px 4px 14px; }
+.krl .info-body { margin: 0; font-size: 14px; white-space: pre-line; }
 
 /* TJ map page */
 #map { position: absolute; inset: 0; background: var(--bg); }
