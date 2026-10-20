@@ -7,16 +7,21 @@ import { buildHalte, nextBuses, nextTrains } from "../transit";
 import { BUS, Ico, TRAIN } from "../icons";
 
 // Bus position `off` seconds into a trip: straight line between stops.
+// v = [dLat, dLon] of the current leg (last leg at the terminus), for heading and direction.
 // ponytail: ignores road shape (shapes.txt), use it if straight lines look wrong on curvy routes.
 function at(stops, off) {
   const i = stops.findLastIndex((s) => s[2] <= off),
     a = stops[i],
     b = stops[i + 1];
-  if (!b) return { ll: [a[0], a[1]], next: a[3] };
+  if (!b) {
+    const z = stops[i - 1];
+    return { ll: [a[0], a[1]], next: a[3], v: [a[0] - z[0], a[1] - z[1]] };
+  }
   const f = (off - a[2]) / (b[2] - a[2]);
   return {
     ll: [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f],
     next: b[3],
+    v: [b[0] - a[0], b[1] - a[1]],
   };
 }
 console.assert(
@@ -28,6 +33,53 @@ console.assert(
     50,
   ).ll.join() === "1,2",
 );
+
+// Corridor axis: first stop -> stop farthest from it, over all its trips. Names the two directions.
+function axes(trips) {
+  const out = new Map();
+  for (const t of trips)
+    for (const s of t.s) {
+      const a = t.s[0],
+        d = (s[0] - a[0]) ** 2 + (s[1] - a[1]) ** 2;
+      if (d >= (out.get(t.r)?.d ?? 0)) out.set(t.r, { d, a, b: s });
+    }
+  return out;
+}
+
+// Which way a leg runs along the axis: ">" towards b, "<" back towards a.
+// ponytail: straight-line projection, ring-shaped corridors flip midway; use GTFS direction_id if that bites.
+const way = (v, { a, b }) =>
+  v[0] * (b[0] - a[0]) + v[1] * (b[1] - a[1]) >= 0 ? ">" : "<";
+console.assert(way([1, 0], { a: [0, 0], b: [5, 1] }) === ">");
+
+// Compass heading of a leg in radians, clockwise from north (canvas y grows down, so this rotates correctly).
+const heading = (v) => Math.atan2(v[1], v[0]);
+
+// Canvas dot drawn as an arrowhead pointing `options.angle`, kept inside the circle's radius.
+// ponytail: uses Leaflet 1.9 canvas internals (_renderer._ctx/_fillStroke), recheck on a Leaflet upgrade.
+const arrowMarker = (L) =>
+  L.CircleMarker.extend({
+    _updatePath() {
+      const r = this._renderer;
+      if (!r._drawing || this._empty()) return;
+      const { x, y } = this._point,
+        R = this._radius,
+        c = Math.cos(this.options.angle || 0),
+        s = Math.sin(this.options.angle || 0),
+        ctx = r._ctx;
+      ctx.beginPath();
+      [
+        [0, -R],
+        [0.7 * R, 0.7 * R],
+        [0, 0.3 * R],
+        [-0.7 * R, 0.7 * R],
+      ].forEach(([px, py], i) =>
+        ctx[i ? "lineTo" : "moveTo"](x + px * c - py * s, y + px * s + py * c),
+      );
+      ctx.closePath();
+      r._fillStroke(ctx, this);
+    },
+  });
 
 // Every bus on the road now: departures every headway inside each frequency window.
 // ponytail: buses that left before midnight vanish at 00:00.
@@ -97,12 +149,13 @@ export default function TJ() {
   const [ready, setReady] = useState(false);
   const [routes, setRoutes] = useState([]);
   const [route, setRoute] = useState("");
+  const [dir, setDir] = useState(""); // "", ">" or "<" along the corridor axis
   const [count, setCount] = useState(null);
   const [clock, setClock] = useState("--.--");
   const [me, setMe] = useState(null);
   const [near, setNear] = useState(null); // status text or list of cards
   const [locating, setLocating] = useState(false);
-  const [mini, setMini] = useState(false); // mobile: sheet folded down to its header
+  const [mini, setMini] = useState(false); // panel closed, only its open button shows
 
   // Leaflet touches `window` on import, so load it client-side only.
   useEffect(() => {
@@ -130,7 +183,13 @@ export default function TJ() {
         ["/krl.json", "/tj.json"].map((u) => fetch(u).then((r) => r.json())),
       );
       if (dead) return;
-      Object.assign(g, { krl, trips, halte: buildHalte(trips) });
+      Object.assign(g, {
+        krl,
+        trips,
+        halte: buildHalte(trips),
+        axis: axes(trips),
+        Arrow: arrowMarker(L),
+      });
       setRoutes(
         [...new Map(trips.map((t) => [t.r, [t.r, t.n, t.r, t.c]])).values()].sort(([a], [b]) =>
           a.localeCompare(b, "id", { numeric: true }),
@@ -147,7 +206,7 @@ export default function TJ() {
   // Route lines + moving buses, redrawn when the corridor filter changes.
   useEffect(() => {
     if (!ready) return;
-    const { L, map, lines, buses, trips } = g;
+    const { L, map, lines, buses, trips, axis, Arrow } = g;
     lines.clearLayers();
     trips
       .filter((t) => !route || t.r === route)
@@ -168,14 +227,17 @@ export default function TJ() {
 
     const tick = () => {
       const { d, now, day } = clockNow(),
-        list = active(trips, now, day, route),
         seen = new Set();
+      let count = 0;
       // Bus icons are DOM nodes, so only when few are visible: one corridor, or zoomed in (on-screen only).
       // Otherwise cheap canvas dots for the ~6000 citywide.
       const icons = route || map.getZoom() >= 15,
         view = map.getBounds().pad(0.2);
-      for (const b of list) {
-        const p = at(b.t.s, b.off);
+      for (const b of active(trips, now, day, route)) {
+        const p = at(b.t.s, b.off),
+          w = way(p.v, axis.get(b.t.r));
+        if (dir && w !== dir) continue;
+        count++;
         if (icons && !route && !view.contains(p.ll)) continue;
         const key = b.id + (icons ? "i" : "");
         seen.add(key);
@@ -190,8 +252,8 @@ export default function TJ() {
                     iconSize: [30, 30],
                   }),
                 })
-              : L.circleMarker(p.ll, {
-                  radius: 5,
+              : new Arrow(p.ll, {
+                  radius: 9,
                   color: "#fff",
                   weight: 1.5,
                   fillColor: b.t.c,
@@ -200,8 +262,15 @@ export default function TJ() {
           ).addTo(map);
           buses.set(key, m);
         }
+        // Zero-length leg (same stop twice): keep the last heading.
+        if (p.v[0] || p.v[1]) {
+          m.options.angle = heading(p.v);
+          m.getElement()?.style.setProperty("--a", m.options.angle + "rad");
+        }
+        const { a, b: z } = axis.get(b.t.r),
+          [from, to] = w === ">" ? [a[3], z[3]] : [z[3], a[3]];
         m.setLatLng(p.ll).bindTooltip(
-          `<b>${esc(b.t.r)}</b> ${esc(b.t.h)}<br><span class="mute">berikut:</span> ${esc(p.next)}`,
+          `<b>${esc(b.t.r)}</b> ${esc(from)} → ${esc(to)}<br><span class="mute">tujuan:</span> ${esc(b.t.h)}<br><span class="mute">berikut:</span> ${esc(p.next)}`,
         );
       }
       for (const [id, m] of buses)
@@ -209,7 +278,7 @@ export default function TJ() {
           m.remove();
           buses.delete(id);
         }
-      setCount(list.length);
+      setCount(count);
       setClock(
         d.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }),
       );
@@ -221,7 +290,7 @@ export default function TJ() {
       clearInterval(id);
       map.off("moveend", tick);
     };
-  }, [ready, route, g]);
+  }, [ready, route, dir, g]);
 
   // Nearest halte + KRL stations around the user, refreshed on every GPS fix and every 30 s.
   useEffect(() => {
@@ -386,7 +455,7 @@ export default function TJ() {
           aria-expanded={!mini}
           onClick={() => setMini(!mini)}
         >
-          {mini ? "▲ Tampilkan panel" : "▼ Sembunyikan panel"}
+          {mini ? "☰ Tampilkan panel" : "✕ Tutup panel"}
         </button>
         <header className="top">
           <div className="brand">Transumku</div>
@@ -406,10 +475,26 @@ export default function TJ() {
           <span className="label">Koridor</span>
           <Search
             value={route}
-            onChange={setRoute}
+            onChange={(r) => {
+              setRoute(r);
+              setDir("");
+            }}
             options={[["", "Semua koridor", "∗"], ...routes]}
           />
         </label>
+        {route && (
+          <div className="seg" role="group" aria-label="Arah">
+            {[
+              ["", "Dua arah"],
+              [">", `${g.axis.get(route).a[3]} → ${g.axis.get(route).b[3]}`],
+              ["<", `${g.axis.get(route).b[3]} → ${g.axis.get(route).a[3]}`],
+            ].map(([v, l]) => (
+              <button key={v} aria-pressed={dir === v} onClick={() => setDir(v)}>
+                {l}
+              </button>
+            ))}
+          </div>
+        )}
         <button className="btn" disabled={locating} onClick={locate}>
           Lokasi saya + terdekat
         </button>
